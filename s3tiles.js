@@ -25,19 +25,15 @@ function S3Tiles(uri, callback) {
   
   this._isWriting = 0;
   this.contentType = 'image/jpeg';
-  
-  var parts = uri.path.split('/');
-  if (parts.length !== 2) {
-    throw new Error('Invalid uri, must be formatted as s3tiles://<bucket>/<tileset>#<content-type>');
-  }
+
   if (uri.hash) {
     this.contentType = uri.hash.split('#')[1];
   } else {
     console.log('warning: no content-type specified, defaulting to %s.', this.contentType);
   }
   
-  var bucket = this.bucket = parts[0];
-  this.tileset = parts[1];
+  var bucket = this.bucket = uri.host;
+  this.tileset = uri.path.split('/')[1];
   
   var that = this;
   s3.headBucket({"Bucket":bucket}, function(err, data) {
