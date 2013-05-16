@@ -66,13 +66,14 @@ S3Tiles.registerProtocols = function(tilelive) {
 
 S3Tiles.prototype.getTile = function(z, x, y, callback) {
   if (typeof callback !== 'function') throw new Error('Callback needed');
+  var that = this;
   s3.getObject({
       Bucket: this.bucket,
       Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
     })
     .on('success', function(response) {
       var options = {
-          'Content-Type': this.getMimeType(response.data.Body),
+          'Content-Type': that.getMimeType(response.data.Body),
           'Last-Modified': response.data.LastModified,
           'ETag': response.data.ETag
       };
