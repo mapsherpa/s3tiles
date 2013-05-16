@@ -71,7 +71,12 @@ S3Tiles.prototype.getTile = function(z, x, y, callback) {
       Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
     })
     .on('success', function(response) {
-      callback(null, response.data.Body);
+      var options = {
+          'Content-Type': this.getMimeType(response.data.Body),
+          'Last-Modified': response.data.LastModified,
+          'ETag': response.data.ETag
+      };
+      callback(null, response.data.Body, options);
     })
     .on('error', function(err) {
       return callback((new Error(err)));
@@ -156,3 +161,19 @@ S3Tiles.prototype.putGrid = function(z, x, y, grid, callback) {
 S3Tiles.prototype.close = function(callback) {
   callback(null);
 }
+
+S3Tiles.prototype.getMimeType =  function(data) {
+  if (data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E &&
+    data[3] === 0x47 && data[4] === 0x0D && data[5] === 0x0A &&
+    data[6] === 0x1A && data[7] === 0x0A) {
+    return 'image/png';
+  } else if (data[0] === 0xFF && data[1] === 0xD8 &&
+    data[data.length - 2] === 0xFF && data[data.length - 1] === 0xD9) {
+    return 'image/jpeg';
+  } else if (data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46 &&
+    data[3] === 0x38 && (data[4] === 0x39 || data[4] === 0x37) &&
+    data[5] === 0x61) {
+    return 'image/gif';
+  }
+};
+
