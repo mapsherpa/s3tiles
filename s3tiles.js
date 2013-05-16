@@ -1,20 +1,36 @@
 var aws = require('aws-sdk')
   , util = require('util')
+  , fs = require('fs')
+  , path = require('path')
   , url = require('url')
   , qs = require('querystring')
   , s3
   ;
 
-if (process.env.AWS_CREDENTIALS_FILE) {
-  aws.config.loadFromPath(process.env.AWS_CREDENTIALS_FILE);
-} else {
-  aws.config.loadFromPath('./aws-credentials.json');
+exports = module.exports = function(options) {
+  options = options || {};
+  
+  if (!options.credentials) {
+    options.credentials = process.env.AWS_CREDENTIALS_FILE || './aws-credentials.json';
+  }
+  options.credentials = path.resolve(options.credentials);
+  
+  if (!options.region) {
+    options.region = process.env.AWS_REGION || 'us-east-1';
+  }
+  
+  if (!fs.existsSync(options.credentials)) {
+    throw new Error ('AWS credentails file not found: %s', options.credentials);
+  }
+  
+  console.log('Initializing AWS in region %s and credentials in %s', options.region, options.credentials);
+
+  aws.config.loadFromPath(options.credentials);
+  aws.config.update({region:options.region});
+
+  s3 = new aws.S3();
+  return S3Tiles;
 }
-
-aws.config.update({region:'us-east-1'});
-s3 = new aws.S3();
-
-exports = module.exports = S3Tiles;
 
 function S3Tiles(uri, callback) {
   if (typeof uri === 'string') {
@@ -94,19 +110,27 @@ S3Tiles.prototype.putTile = function(z, x, y, tile, callback) {
   if (!this._isWriting) return callback(new Error('S3Tiles not in write mode'));
   if (!Buffer.isBuffer(tile)) return callback(new Error('Image needs to be a Buffer'));
   
-  s3.putObject({
-    Body: tile,
-    Bucket: this.bucket,
-    Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
-    ContentType: this.contentType,
-    ACL: 'public-read'
-  }, function(err, data) {
-    if (err) {
-      return callback(err)
-    }
-    callback(null);
-  });
-  
+  try {
+    s3.putObject({
+      Body: tile,
+      Bucket: this.bucket,
+      Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
+      ContentType: this.contentType,
+      ACL: 'public-read'
+    }, function(err, data) {
+      if (err) {
+        return callback(err)
+      }
+      callback(null);
+    });
+  } catch(err) {
+    console.log('S3 Exception not handled: %s', util.inspect(err));
+    console.log('Retrying operation in 1 second');
+    var that = this;
+    setTimeout(function() {
+      that.putTile(z, x, y, tile, callback);
+    }, 1000);
+  }
 }
 
 S3Tiles.prototype.putGrid = function(z, x, y, grid, callback) {
