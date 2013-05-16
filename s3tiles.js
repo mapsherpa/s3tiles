@@ -7,30 +7,21 @@ var aws = require('aws-sdk')
   , s3
   ;
 
-exports = module.exports = function(options) {
-  options = options || {};
-  
-  if (!options.credentials) {
-    options.credentials = process.env.AWS_CREDENTIALS_FILE || './aws-credentials.json';
-  }
-  options.credentials = path.resolve(options.credentials);
-  
-  if (!options.region) {
-    options.region = process.env.AWS_REGION || 'us-east-1';
-  }
-  
-  if (!fs.existsSync(options.credentials)) {
-    throw new Error ('AWS credentails file not found: %s', options.credentials);
-  }
-  
-  console.log('Initializing AWS in region %s and credentials in %s', options.region, options.credentials);
+var options = {
+  credentials: path.resolve(process.env.AWS_CREDENTIALS_FILE || './aws-credentials.json'),
+  region: process.env.AWS_REGION || 'us-east-1'
+};
 
-  aws.config.loadFromPath(options.credentials);
-  aws.config.update({region:options.region});
-
-  s3 = new aws.S3();
-  return S3Tiles;
+if (!fs.existsSync(options.credentials)) {
+  throw new Error ('AWS credentails file not found: %s', options.credentials);
 }
+
+aws.config.loadFromPath(options.credentials);
+aws.config.update({region:options.region});
+
+s3 = new aws.S3();
+
+exports = module.exports = S3Tiles;
 
 function S3Tiles(uri, callback) {
   if (typeof uri === 'string') {
@@ -52,22 +43,21 @@ function S3Tiles(uri, callback) {
   this.tileset = uri.path.split('/')[1];
   
   var that = this;
-  s3.headBucket({"Bucket":bucket}, function(err, data) {
-    if (err) {
-      console.log('Bucket ' + bucket + ' missing, creating bucket (%s)', util.inspect(err));
+  s3.headBucket({"Bucket":bucket})
+    .on('success', function(response) {
+      callback(null, that);
+    })
+    .on('error', function(err) {
       s3.createBucket({"Bucket":bucket})
         .on('success', function(response) { 
-          console.log('bucket created.');
           callback(null, that);
         })
         .on('error', function(response) {
           callback(new Error(util.format('error creating bucket %s', JSON.stringify(response))));
         })
         .send();    
-    } else {
-      callback(null, that);
-    }
-  });
+    })
+    .send();
 }
 
 S3Tiles.registerProtocols = function(tilelive) {
@@ -109,7 +99,7 @@ S3Tiles.prototype.putTile = function(z, x, y, tile, callback) {
   if (typeof callback !== 'function') throw new Error('Callback needed');
   if (!this._isWriting) return callback(new Error('S3Tiles not in write mode'));
   if (!Buffer.isBuffer(tile)) return callback(new Error('Image needs to be a Buffer'));
-  
+
   try {
     s3.putObject({
       Body: tile,
@@ -126,6 +116,7 @@ S3Tiles.prototype.putTile = function(z, x, y, tile, callback) {
   } catch(err) {
     console.log('S3 Exception not handled: %s', util.inspect(err));
     console.log('Retrying operation in 1 second');
+    
     var that = this;
     setTimeout(function() {
       that.putTile(z, x, y, tile, callback);
