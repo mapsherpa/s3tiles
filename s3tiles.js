@@ -65,11 +65,35 @@ S3Tiles.registerProtocols = function(tilelive) {
 };
 
 S3Tiles.prototype.getTile = function(z, x, y, callback) {
-  callback(new Error('getTile not implemented'));
+  if (typeof callback !== 'function') throw new Error('Callback needed');
+  s3.getObject({
+      Bucket: this.bucket,
+      Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
+    })
+    .on('success', function(response) {
+      callback(null, response.data.Body);
+    })
+    .on('error', function(err) {
+      return callback((new Error(err)));
+    })
+    .send();
 }
 
 S3Tiles.prototype.getGrid = function(z, x, y, callback) {
-  callback(new Error('getGrid not implemented'));
+  s3.getObject({
+      Bucket: this.bucket,
+      Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
+    })
+    .on('success', function(err, data) {
+      if (err) {
+        return callback(new Error(err));
+      }
+      callback(null, data.Buffer);
+    })
+    .on('error', function(err) {
+      return callback((new Error(err)));
+    })
+    .send();
 }
 
 S3Tiles.prototype.getInfo = function(callback) {

@@ -4,12 +4,28 @@
   "description": "S3 TileSource and TileSink for tilelive",
   "main": "s3tiles.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node_modules/.bin/mocha test/s3tiles.js"
   },
-  "repository": "http://github.com/pagameba/s3tiles",
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/pagameba/s3tiles"
+  },
   "author": "Paul Spencer",
   "license": "MIT",
   "dependencies": {
     "aws-sdk": "~1.0.0"
-  }
+  },
+  "devDependencies": {
+    "better-assert": "~1.0.0",
+    "mocha": "~1.9.0",
+    "uuid": "~1.4.1"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "keywords": [
+    "s3",
+    "tilelive",
+    ""
+  ]
 }
