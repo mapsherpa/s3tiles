@@ -35,8 +35,6 @@ function S3Tiles(uri, callback) {
 
   if (uri.hash) {
     this.contentType = uri.hash.split('#')[1];
-  } else {
-    console.log('warning: no content-type specified, defaulting to %s.', this.contentType);
   }
   
   var bucket = this.bucket = uri.host;
