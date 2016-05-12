@@ -13,7 +13,7 @@
   "author": "Paul Spencer",
   "license": "MIT",
   "dependencies": {
-    "aws-sdk": "~1.0.0"
+    "aws-sdk": "^2.3.10"
   },
   "devDependencies": {
     "better-assert": "~1.0.0",
