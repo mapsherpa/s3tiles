@@ -1,5 +1,4 @@
-var aws = require('aws-sdk')
-  , util = require('util')
+var util = require('util')
   , fs = require('fs')
   , path = require('path')
   , url = require('url')
@@ -7,19 +6,17 @@ var aws = require('aws-sdk')
   , s3
   ;
 
+const { S3Client, CreateBucketCommand, HeadBucketCommand, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { fromIni } = require("@aws-sdk/credential-providers");
+
 var options = {
-  credentials: path.resolve(process.env.AWS_CREDENTIALS_FILE || './aws-credentials.json'),
   region: process.env.AWS_REGION || 'us-east-1'
 };
 
-if (!fs.existsSync(options.credentials)) {
-  throw new Error ('AWS credentails file not found: %s', options.credentials);
-}
-
-aws.config.loadFromPath(options.credentials);
-aws.config.update({region:options.region});
-
-s3 = new aws.S3();
+s3 = new S3Client({
+  credentials: fromIni(),
+  region: options.region
+});
 
 exports = module.exports = S3Tiles;
 
@@ -41,21 +38,25 @@ function S3Tiles(uri, callback) {
   this.tileset = uri.path.split('/')[1];
   
   var that = this;
-  s3.headBucket({"Bucket":bucket})
-    .on('success', function(response) {
+
+  const params = {"Bucket":bucket};
+  const command = new HeadBucketCommand(params);
+
+  s3.send(command)
+  .then( response => {
+    callback(null, that);
+  })
+  .catch( err => {
+    const command = new CreateBucketCommand(params);
+    
+    s3.send(command)
+    .then ( response => {
       callback(null, that);
     })
-    .on('error', function(err) {
-      s3.createBucket({"Bucket":bucket})
-        .on('success', function(response) { 
-          callback(null, that);
-        })
-        .on('error', function(response) {
-          callback(new Error(util.format('error creating bucket %s', JSON.stringify(response))));
-        })
-        .send();    
-    })
-    .send();
+    .catch( err => {
+      callback(new Error(util.format('error creating bucket %s', JSON.stringify(response))));
+    });
+  });
 }
 
 S3Tiles.registerProtocols = function(tilelive) {
@@ -65,39 +66,52 @@ S3Tiles.registerProtocols = function(tilelive) {
 S3Tiles.prototype.getTile = function(z, x, y, callback) {
   if (typeof callback !== 'function') throw new Error('Callback needed');
   var that = this;
-  s3.getObject({
-      Bucket: this.bucket,
-      Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
+
+  const params = {
+    Bucket: this.bucket,
+    Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
+  };
+
+  const command = new GetObjectCommand (params);
+  
+  s3.send(command)
+  .then ( response => {
+    const options = {
+        'Content-Type': response.ContentType.replace("content-type=",""),
+        'Last-Modified': response.LastModified,
+        'ETag': response.ETag.replace('"','')
+    };
+
+    streamToBuffer(response.Body)
+    .then( buffer => {
+      return callback(null, buffer, options);
     })
-    .on('success', function(response) {
-      var options = {
-          'Content-Type': that.getMimeType(response.data.Body),
-          'Last-Modified': response.data.LastModified,
-          'ETag': response.data.ETag
-      };
-      callback(null, response.data.Body, options);
+    .catch (err => {
+      return callback(err);
     })
-    .on('error', function(err) {
-      return callback((new Error(err)));
-    })
-    .send();
+  })
+  .catch ( err => {
+    if (err.name && err.name != 'NoSuchKey'){
+      return callback(err);
+    }
+  });
 }
 
 S3Tiles.prototype.getGrid = function(z, x, y, callback) {
-  s3.getObject({
-      Bucket: this.bucket,
-      Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
-    })
-    .on('success', function(err, data) {
-      if (err) {
-        return callback(new Error(err));
-      }
-      callback(null, data.Buffer);
-    })
-    .on('error', function(err) {
-      return callback((new Error(err)));
-    })
-    .send();
+  const params = {
+    Bucket: this.bucket,
+    Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
+  };
+
+  const command = new GetObjectCommand(params);
+
+  s3.send(command)
+  .then ( response => {
+    return callback(null, streamToBuffer(response.Body));
+  })
+  .catch ( err => {
+    return callback(err);
+  });
 }
 
 S3Tiles.prototype.getInfo = function(callback) {
@@ -124,32 +138,9 @@ S3Tiles.prototype.putInfo = function(info, callback) {
 }
 
 S3Tiles.prototype.putTile = function(z, x, y, tile, callback) {
+  // don't think we need this
   if (typeof callback !== 'function') throw new Error('Callback needed');
-  if (!this._isWriting) return callback(new Error('S3Tiles not in write mode'));
-  if (!Buffer.isBuffer(tile)) return callback(new Error('Image needs to be a Buffer'));
-
-  try {
-    s3.putObject({
-      Body: tile,
-      Bucket: this.bucket,
-      Key: util.format('%s/%s/%s/%s', this.tileset, z, x, y),
-      ContentType: this.contentType,
-      ACL: 'public-read'
-    }, function(err, data) {
-      if (err) {
-        return callback(err)
-      }
-      callback(null);
-    });
-  } catch(err) {
-    console.log('S3 Exception not handled: %s', util.inspect(err));
-    console.log('Retrying operation in 1 second');
-    
-    var that = this;
-    setTimeout(function() {
-      that.putTile(z, x, y, tile, callback);
-    }, 1000);
-  }
+  callback(null);
 }
 
 S3Tiles.prototype.putGrid = function(z, x, y, grid, callback) {
@@ -176,3 +167,12 @@ S3Tiles.prototype.getMimeType =  function(data) {
   }
 };
 
+// Helper function to convert ReadableStream to Buffer using .then
+function streamToBuffer(stream) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on('data', chunk => chunks.push(chunk));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+  });
+}
