@@ -6,7 +6,7 @@ var util = require('util')
   , s3
   ;
 
-const { S3Client, CreateBucketCommand, HeadBucketCommand, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, CreateBucketCommand, HeadBucketCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { fromIni } = require("@aws-sdk/credential-providers");
 
 var options = {
