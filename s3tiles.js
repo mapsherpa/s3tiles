@@ -1,10 +1,7 @@
-var util = require('util')
-  , fs = require('fs')
-  , path = require('path')
-  , url = require('url')
-  , qs = require('querystring')
-  , s3
-  ;
+const util = require('util');
+const url = require('url')
+const qs = require('querystring')
+var s3;
 
 const { S3Client, CreateBucketCommand, HeadBucketCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { fromIni } = require("@aws-sdk/credential-providers");
@@ -54,7 +51,7 @@ function S3Tiles(uri, callback) {
       callback(null, that);
     })
     .catch( err => {
-      callback(new Error(util.format('error creating bucket %s', JSON.stringify(response))));
+      callback(new Error(util.format('error creating bucket %s', err)));
     });
   });
 }
